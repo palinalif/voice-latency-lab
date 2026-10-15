@@ -1,0 +1,49 @@
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- Local state and secrets -------------------------------------------------
+.env
+profiles/
+*.npy
+*.wav
+*.mp3
+*.log
+secrets/
+
+# --- Character work ----------------------------------------------------------
+# Persona prompts and voice descriptions are authored content, not code.
+# Ship personas.builtin.example.json instead; the loader reads the real file
+# from BUILTIN_PERSONA_FILE (default /profiles/personas.builtin.json).
+personas.builtin.json
+
+# --- Model weights (fetched separately, see README) --------------------------
+models/
+nomo-pvad/
+
+# --- Local-only deployment notes ---------------------------------------------
+# These describe one specific machine: hostnames, LAN addresses, storage paths.
+notes/
+
+# --- Dev scratch --------------------------------------------------------------
+# Historical snapshots the author keeps next to the live source.
+*.pre-*
+*.bak
+*.bak-*
+*.bak.*
+*.known-good-*
+src/Dockerfile.nomo
+src/Dockerfile.overlay
+# Byte-for-byte copies of what a running container was serving.
+retrieved/
+# Host-specific helper scripts (SMB fetcher, compose rewriter).
+tools/
+
+# --- Editors / OS -------------------------------------------------------------
+.DS_Store
+*.swp
+.idea/
+.vscode/

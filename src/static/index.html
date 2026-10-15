@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Voice Latency Lab</title>
+
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    background: #151515;
+    color: #eee;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+button, select {
+    font: inherit;
+    padding: 8px 14px;
+    margin-right: 8px;
+}
+
+.card {
+    background: #222;
+    padding: 16px;
+    border-radius: 10px;
+    margin-top: 16px;
+}
+
+#state {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+pre {
+    white-space: pre-wrap;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+td {
+    padding: 5px;
+    border-bottom: 1px solid #333;
+}
+
+td:last-child {
+    text-align: right;
+    font-family: monospace;
+}
+
+input[type="text"] {
+    font: inherit;
+    padding: 7px 10px;
+    background: #1a1a1a;
+    color: #eee;
+    border: 1px solid #333;
+    border-radius: 8px;
+}
+
+input[type="file"] {
+    color: #bbb;
+    font-size: 0.88em;
+}
+
+label {
+    font-size: 0.9em;
+}
+
+.hint {
+    margin-top: 10px;
+    opacity: 0.55;
+    font-size: 0.82em;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Voice Latency Lab</h1>
+
+<div>
+    <!-- Filled from GET /personas; empty until the server answers. -->
+    <select id="persona"></select>
+    <span
+        id="persona_info"
+        style="opacity: 0.6; font-size: 0.85em; margin-right: 8px;"
+    ></span>
+
+    <button id="start">Start mic</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="enroll" disabled>Enroll my voice</button>
+    <button id="test_wav">Stream test WAV</button>
+    <button id="copy_diagnostics">Copy diagnostics</button>
+    <input
+        id="test_wav_input"
+        type="file"
+        accept=".wav,audio/wav"
+        hidden
+    >
+    <span id="voice_profile">Voice profile: checking…</span>
+</div>
+
+<div class="card">
+    <strong>Import persona</strong>
+    <span
+        id="persona_import_status"
+        style="margin-left: 8px; font-size: 0.88em;"
+    ></span>
+
+    <div
+        style="
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+            margin-top: 10px;
+        "
+    >
+        <label>
+            Preset JSON
+            <input
+                type="file"
+                id="persona_json"
+                accept=".json,application/json"
+            >
+        </label>
+        <label>
+            Voice sample
+            <input
+                type="file"
+                id="persona_voice"
+                accept=".wav,.mp3,.ogg,.flac,audio/*"
+            >
+        </label>
+    </div>
+
+    <div
+        style="
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        "
+    >
+        <input
+            type="text"
+            id="persona_text"
+            style="flex: 1"
+            placeholder="What does the sample say? (optional, improves cloning)"
+        >
+        <button id="persona_import_btn">Import</button>
+        <button id="persona_delete_btn" disabled>Delete selected</button>
+    </div>
+
+    <div class="hint">
+        A TomoriBot preset JSON plus a short recording of the target voice.
+        The sample is registered as a VoxCPM voice and the persona is added to
+        the dropdown above (marked ★). WAV works best; 3–10 seconds of clean
+        speech is plenty.
+    </div>
+</div>
+
+<div class="card">
+    <div id="state">OFFLINE</div>
+</div>
+
+<div class="card">
+    <strong>You</strong>
+    <pre id="transcript"></pre>
+    <div
+        id="emotion"
+        style="
+            margin-top: -0.35rem;
+            margin-bottom: 1rem;
+            opacity: 0.72;
+            font-size: 0.9em;
+        "
+    ></div>
+
+    <div
+        id="sensevoice"
+        style="
+            margin-top: -0.55rem;
+            margin-bottom: 0.25rem;
+            opacity: 0.72;
+            font-size: 0.9em;
+        "
+    ></div>
+
+    <div
+        id="tone_fusion"
+        style="
+            margin-bottom: 1rem;
+            opacity: 0.88;
+            font-size: 0.9em;
+            font-weight: 600;
+        "
+    ></div>
+
+    <strong>Vision · shadow</strong>
+    <div
+        id="vision_summary"
+        style="
+            margin-top: 0.35rem;
+            margin-bottom: 0.75rem;
+            opacity: 0.82;
+            font-size: 0.9em;
+        "
+    >Camera inactive</div>
+
+    <canvas
+        id="vision_preview"
+        width="320"
+        height="180"
+        style="
+            width: 320px;
+            max-width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #111;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        "
+    ></canvas>
+
+    <strong>Assistant</strong>
+    <pre id="assistant"></pre>
+</div>
+
+<div class="card">
+    <strong>Timing from last speech frame</strong>
+
+    <table>
+        <tr><td>VAD candidate</td><td id="vad_candidate">—</td></tr>
+        <tr><td>Parakeet final</td><td id="whisper_final">—</td></tr>
+        <tr><td>LLM request</td><td id="llm_request">—</td></tr>
+        <tr><td>LLM first token</td><td id="llm_first_token">—</td></tr>
+        <tr><td>First phrase</td><td id="first_phrase">—</td></tr>
+        <tr><td>S2 request</td><td id="s2_request">—</td></tr>
+        <tr><td>First PCM</td><td id="first_pcm">—</td></tr>
+        <tr><td>Actual playback</td><td id="playback_start">—</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <strong>Events</strong>
+    <pre id="log"></pre>
+</div>
+
+<script src="/static/app.js?v=ring-v23-personas"></script>
+
+</body>
+</html>

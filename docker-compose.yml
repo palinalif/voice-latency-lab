@@ -1,0 +1,89 @@
+# Voice Latency Lab — reference compose
+#
+# The lab itself is a small CPU-only FastAPI app. The heavy models it depends on
+# run as separate services:
+#
+#   parakeet    (STT)   — included here, small, optional GPU
+#   VoxCPM2     (TTS)   — required, NOT included; point VOXCPM_URL at it
+#   LLM backend         — required, NOT included; either a hosted OpenAI-compatible
+#                         endpoint (VOICE_LLM_BACKEND=qwen) or self-hosted vLLM with
+#                         native audio input (VOICE_LLM_BACKEND=gemma4)
+#
+# Copy .env.example to .env first — compose reads it and the container inherits it.
+#
+#   cp .env.example .env && docker compose up -d --build
+#
+# Containers are named by compose (<project>-voice-lab-1, ...) rather than a
+# fixed container_name, so this can run next to an existing deployment. You will
+# still need a free host port: VOICE_LAB_PORT=8091 docker compose up -d.
+
+services:
+  voice-lab:
+    build:
+      context: ./src
+    image: voice-latency-lab:local
+    restart: unless-stopped
+    ports:
+      - "${VOICE_LAB_PORT:-8090}:8090"
+    env_file:
+      - .env
+    extra_hosts:
+      # Lets the container reach sidecars that run on the host rather than in
+      # this compose project (the default in .env.example).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Speaker profile + imported personas live here. Must be writable.
+      - ./profiles:/profiles
+      # NOMO VAD checkout + weights (see README "Fetch the models").
+      - ./models/nomo-pvad:/nomo-pvad:ro
+      # Bind-mount the source so front-end/backend edits only need a recreate.
+      # Drop these two lines for a pure image-based deployment.
+      - ./src/server.py:/app/server.py:ro
+      - ./src/static:/app/static:ro
+    depends_on:
+      - parakeet
+    # The reference deployment instead runs this container with
+    #   network_mode: host
+    # and every sidecar on 127.0.0.1. If you do that, drop `ports` and set the
+    # URLs in .env back to 127.0.0.1.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8090/health').read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # STT sidecar: Parakeet TDT 0.6b v3 as ONNX, GPU with automatic CPU fallback.
+  # Contract: POST raw 16 kHz mono s16le to /transcribe -> {"text": "..."}.
+  # Set PARAKEET_DEVICE=cpu in this service to run without a GPU.
+  # ---------------------------------------------------------------------------
+  parakeet:
+    build:
+      context: ./parakeet-shadow
+    image: parakeet-shadow:local
+    restart: unless-stopped
+    ports:
+      - "3048:3048"
+    environment:
+      PARAKEET_DEVICE: "${PARAKEET_DEVICE:-cuda}"
+      PARAKEET_MODEL_DIR: /models/parakeet
+    volumes:
+      - ./models/parakeet:/models/parakeet:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:3048/health').read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
